@@ -230,8 +230,11 @@ actually_run() {
 
     echo "latest: $latest"
     echo "yours: $zipfile"
-    read -n 1 -s -r -p "Press the any key to continue"
-    echo ""
+    if [[ ! "$zipfile" == "$latest"* ]]; then
+        echo "your image is out of date!"
+        read -n 1 -s -r -p "Press the any key to continue"
+        echo ""
+    fi
 
     zipdir=$(dirname $(realpath "${zipfile}"))
 
