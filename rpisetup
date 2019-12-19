@@ -271,7 +271,7 @@ actually_run() {
 
     #assume that if the /home/pi directory doesn't exist, all setup is done.
     if [ ! -d $MOUNT_POINT/home/pi/ ]; then
-        echo "ASSUMING IMAGE ALREADY CONFIGURED: TODO maybe not that"
+        echo "ASSUMING USER ALREADY CONFIGURED: TODO maybe not that"
     else
         run_chroot "groups pi"
         run_chroot "useradd $username -m -G \\\$(groups pi | sed 's/pi : pi //; s/ /,/g')"
@@ -282,8 +282,12 @@ actually_run() {
         # maybe just set $HOME?
 
         run_chroot sudo deluser -remove-home pi
-        #set hostname
-        run_chroot sed -i "s/raspberrypi/$hostname/" /etc/hosts /etc/hostname
+
+        #set hostname, can be run multiple times
+        CURRENT_HOSTNAME=$(cat $MOUNT_POINT/etc/hostname | tr -d " \t\n\r")
+        run_chroot "echo '$hostname' > /etc/hostname"
+        run_chroot "sed -i 's/127.0.1.1.*$CURRENT_HOSTNAME/127.0.1.1\t$hostname/g' /etc/hosts"
+
 
 
         # install random things
