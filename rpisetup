@@ -226,8 +226,8 @@ actually_run() {
         exit 1
     fi
 
-    latestLink=$(curl -s http://downloads.raspberrypi.org/rss.xml | xq '[.rss.channel.item[] | select(.title | contains("raspbian_lite"))] | .[-1]'  | jq .link -r)
-    latest=$(echo "$latestLink" | sed -n 's/.*\([[:digit:]]\{4\}-[[:digit:]]\{2\}-[[:digit:]]\{2\}-raspbian-[[:alpha:]]*-lite\).zip.torrent.*/\1/p')
+    latestLink=$(curl -s http://downloads.raspberrypi.org/rss.xml | xq '[.rss.channel.item[] | select(.title | contains("raspios_lite"))] | .[-1]'  | jq .link -r)
+    latest=$(echo "$latestLink" | sed -n 's/.*\([[:digit:]]\{4\}-[[:digit:]]\{2\}-[[:digit:]]\{2\}-raspios.*\).zip.torrent.*/\1/p')
 
     echo "latest: $latest"
     echo "yours: $zipfile"
