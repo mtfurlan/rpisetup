@@ -24,7 +24,7 @@ help () {
     #don't echo commands
     set +x
     # if arguments, print them
-    [ $# == 0 ] || echo $*
+    [ $# == 0 ] || echo "$@"
 
     echo "usage: $0 <options> zipfile"
     echo " -w, --write=target       write raspian to sdcard"
@@ -47,7 +47,8 @@ help () {
 
 main() {
     # getopt short options go together, long options have commas
-    TEMP=`getopt -o w:h:u:svq --long help,write:,hostname:,user:,shell,verbose,uart,wifi-ssid:,wifi-pass:,keep-mount,unmount -n $0 -- "$@"`
+    TEMP=$(getopt -o w:h:u:svq --long help,write:,hostname:,user:,shell,verbose,uart,wifi-ssid:,wifi-pass:,keep-mount,unmount -n "$0" -- "$@")
+    #shellcheck disable=SC2181
     if [ $? != 0 ] ; then
         echo "Something wrong with getopt" >&2
         exit 1
@@ -81,10 +82,10 @@ main() {
 
     zipfile=${1:-}
 
-    if [[ ! -z "$hostname" ]]; then echo "hostname: $hostname"; fi
+    if [[ -n "$hostname" ]]; then echo "hostname: $hostname"; fi
     echo "username: $username"
     if [ "$rpi_shell" -eq 1 ]; then echo "launching shell"; fi
-    if [[ ! -z "$target" ]]; then echo "writing to target $target"; fi
+    if [[ -n "$target" ]]; then echo "writing to target $target"; fi
     echo "verbosity: $verbose"
     echo "sourcefile: $zipfile"
 
@@ -102,12 +103,12 @@ cleanup() {
     fi
 }
 
-vecho() { [ $verbose -lt 2 ] || echo $* >/dev/stderr; }
+vecho() { [ $verbose -lt 2 ] || echo "$@" >/dev/stderr; }
 SUDO() {
-    cmd="sudo $@"
+    cmd="sudo $*"
     [ $verbose -lt 1 ] || echo "SUDO '$cmd'"
 
-    $($cmd);
+    $cmd
 }
 
 dd_somewhere () {
@@ -117,7 +118,7 @@ dd_somewhere () {
         exit 1
     fi
     echo "dding to $dev"
-    SUDO dd if="$imgfile" of=$dev bs=1M status=progress
+    SUDO dd if="$imgfile" of="$dev" bs=1M status=progress
 }
 
 
@@ -159,7 +160,7 @@ mount_loop() {
 }
 
 is_mounted() {
-    mount | grep $(realpath $1 2>/dev/null) &>/dev/null
+    mount | grep "$(realpath "$1" 2>/dev/null)" &>/dev/null
 }
 
 setup_chroot() {
@@ -171,7 +172,10 @@ setup_chroot() {
     fi
     SUDO cp /usr/bin/qemu-arm-static ${MOUNT_POINT}/usr/bin/
 
-    SUDO mv $MOUNT_POINT/etc/ld.so.preload $MOUNT_POINT/etc/ld.so.preload.disabled
+    # I guess this isn't needed anymore?
+    # > To get everything work (e.g., network) you need to comment out everything in /mnt/etc/ld.so.preload before you chroot in.
+    # https://wiki.debian.org/RaspberryPi/qemu-user-static
+    #SUDO mv $MOUNT_POINT/etc/ld.so.preload $MOUNT_POINT/etc/ld.so.preload.disabled
 
     for f in proc dev dev/pts sys ;do
         vecho "trying to mount $f"
@@ -180,7 +184,7 @@ setup_chroot() {
 }
 
 run_chroot() {
-    cmd="sudo chroot ${MOUNT_POINT} /bin/bash -c \"$@\""
+    cmd="sudo chroot ${MOUNT_POINT} /bin/bash -c \"$*\""
     echo "running for chroot '$cmd'"
     eval "$cmd"
 }
@@ -188,7 +192,7 @@ run_chroot() {
 
 
 unmount_all() {
-    [ ! -z "$MOUNT_POINT" ] || return 1
+    [ -n "$MOUNT_POINT" ] || return 1
     if [ "$keep_mount" = true ]; then
         echo "NOT UNMOUNTING"
         return 0;
@@ -238,13 +242,13 @@ actually_run() {
         echo ""
     fi
 
-    zipdir=$(dirname $(realpath "${zipfile}"))
+    zipdir=$(dirname "$(realpath "${zipfile}")")
 
-    if [ ${zipfile: -4} == ".zip" ]; then
-        imgfile=$(echo "$zipfile" | sed 's/zip$/img/')
-        cd $zipdir
+    if [ "${zipfile: -4}" == ".zip" ]; then
+        imgfile=${zipfile/.zip/.img}
+        cd "$zipdir"
         if [[ ! -f "$imgfile" ]]; then
-            unzip $zipfile
+            unzip "$zipfile"
             if [[ ! -f "$imgfile" ]]; then
               echo "Issue unzipping $zipfile";
               exit 1
@@ -260,7 +264,7 @@ actually_run() {
     #START OF ACTUAL STUFF
 
     mount_loop
-    if [ -z "${MOUNT_POINT}" -o ! -f "$MOUNT_POINT/etc/rpi-issue" -o ! -f "$MOUNT_POINT/boot/issue.txt" ]; then
+    if [ -z "${MOUNT_POINT}" ] || [ ! -f "$MOUNT_POINT/etc/rpi-issue" ] || [ ! -f "$MOUNT_POINT/boot/issue.txt" ]; then
         help raspbian root not as expected
     fi
     #now we're mounted in memory
@@ -278,15 +282,16 @@ actually_run() {
         run_chroot "groups pi"
         run_chroot "useradd $username -m -G \\\$(groups pi | sed 's/pi : pi //; s/ /,/g')"
         run_chroot "echo '$username:hunter.2' | chpasswd"
-        SUDO git clone https://github.com/mtfurlan/dotfiles.git $MOUNT_POINT/home/$username/.dotfiles
-        run_chroot chown -R $username:$username /home/$username/.dotfiles
+        SUDO git clone https://github.com/mtfurlan/dotfiles.git "$MOUNT_POINT/home/$username/.dotfiles"
+        run_chroot chown -R "$username:$username" "/home/$username/.dotfiles"
         #TODO: can run setup.sh here, but needs to be run as user pi, and pi has sudo prompts
         # maybe just set $HOME?
 
         run_chroot sudo deluser -remove-home pi
 
         #set hostname, can be run multiple times
-        CURRENT_HOSTNAME=$(cat $MOUNT_POINT/etc/hostname | tr -d " \t\n\r")
+        # shellcheck disable=SC2002
+        CURRENT_HOSTNAME=$(cat "$MOUNT_POINT/etc/hostname" | tr -d " \t\n\r")
         run_chroot "echo '$hostname' > /etc/hostname"
         run_chroot "sed -i 's/127.0.1.1.*$CURRENT_HOSTNAME/127.0.1.1\t$hostname/g' /etc/hosts"
 
@@ -301,7 +306,7 @@ actually_run() {
 enable_uart=1
 EOF
         fi
-        if [[ ! -z "$wifi_ssid" ]]; then
+        if [[ -n "$wifi_ssid" ]]; then
             echo "NOTICE: wifi doesn't work"
             sudo tee "$MOUNT_POINT/boot/wpa_supplicant.conf" >/dev/null <<EOF
 country=us
@@ -323,8 +328,8 @@ EOF
 
     unmount_all
 
-    if [[ ! -z "$target" ]]; then
-        dd_somewhere $target
+    if [[ -n "$target" ]]; then
+        dd_somewhere "$target"
     fi
 }
 
