@@ -20,6 +20,7 @@ username="mark"
 mounted=false
 keep_mount=false
 get_current=false
+keep_img=false
 
 help () {
     #don't echo commands
@@ -41,6 +42,8 @@ help () {
     echo "     --keep-mount         don't unmount at the end"
     echo "     --get-current        give link to current pi image"
     echo "     --unmount            try to unmount a previous run then exit"
+    echo "     --keep-existing-img  don't throw out existing .img"
+    echo "     --help               show this help"
 
     # if args, exit 1 else exit 0
     [ $# == 0 ] || exit 1
@@ -49,7 +52,7 @@ help () {
 
 main() {
     # getopt short options go together, long options have commas
-    TEMP=$(getopt -o w:h:u:svq --long help,write:,hostname:,user:,shell,verbose,uart,wifi-ssid:,wifi-pass:,keep-mount,unmount,get-current -n "$0" -- "$@")
+    TEMP=$(getopt -o w:h:u:svq --long help,write:,hostname:,user:,shell,verbose,uart,wifi-ssid:,wifi-pass:,keep-mount,unmount,get-current,keep-existing-img -n "$0" -- "$@")
     #shellcheck disable=SC2181
     if [ $? != 0 ] ; then
         echo "Something wrong with getopt" >&2
@@ -72,6 +75,7 @@ main() {
             --keep-mount) keep_mount=true ; shift ;;
             --unmount) unmount_all ; exit 0 ; shift ;;
             --get-current) get_current=true ; shift ;;
+            --keep-existing-img) keep_img=true ; shift ;;
             --) shift ; break ;;
             *) echo "Internal error!" ; exit 1 ;;
         esac
@@ -244,7 +248,8 @@ actually_run() {
     fi
 
     latestLink=$(getLatestPiImageLink)
-    latest=$(echo "$latestLink" | sed -n 's/.*\([[:digit:]]\{4\}-[[:digit:]]\{2\}-[[:digit:]]\{2\}-raspios.*\).zip.torrent.*/\1/p')
+    echo "latestlink $latestLink"
+    latest=$(echo "$latestLink" | sed -n 's/.*\([[:digit:]]\{4\}-[[:digit:]]\{2\}-[[:digit:]]\{2\}-raspios.*\)\..*\.torrent/\1/p')
 
     echo "latest: $latest"
     echo "yours: $zipfile"
@@ -255,20 +260,26 @@ actually_run() {
         echo ""
     fi
 
-    zipdir=$(dirname "$(realpath "${zipfile}")")
+    extension=${zipfile##*.}
+    if [ "$extension" == "img" ]; then
+        imgfile=$zipfile
+    elif [ "$extension" == "xz" ]; then
+        imgfile=${zipfile/.xz/}
+        zipdir=$(dirname "$(realpath "${zipfile}")")
 
-    if [ "${zipfile: -4}" == ".zip" ]; then
-        imgfile=${zipfile/.zip/.img}
         cd "$zipdir"
-        if [[ ! -f "$imgfile" ]]; then
-            unzip "$zipfile"
+        if [ -f "$imgfile" ] && [ "$keep_img" = false ]; then
+            rm "$imgfile"
+        fi
+        if [ ! -f "$imgfile" ]; then
+            unxz "$zipfile"
             if [[ ! -f "$imgfile" ]]; then
-              echo "Issue unzipping $zipfile";
-              exit 1
+                echo "Issue unzipping $zipfile";
+                exit 1
             fi
         fi
     else
-        imgfile=$zipfile
+        die "dunno how to handle $extension files $zipfile"
     fi
 
 
