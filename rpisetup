@@ -272,7 +272,7 @@ actually_run() {
             rm "$imgfile"
         fi
         if [ ! -f "$imgfile" ]; then
-            unxz "$zipfile"
+            unxz --keep "$zipfile"
             if [[ ! -f "$imgfile" ]]; then
                 echo "Issue unzipping $zipfile";
                 exit 1
