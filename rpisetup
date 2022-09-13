@@ -253,7 +253,7 @@ actually_run() {
 
     echo "latest: $latest"
     echo "yours: $zipfile"
-    if [[ ! "$zipfile" == "$latest"* ]]; then
+    if [[ ! "$(basename "$zipfile")" == "$latest"* ]]; then
         echo "your image is out of date!"
         echo "$latestLink"
         read -n 1 -s -r -p "Press the any key to continue"
