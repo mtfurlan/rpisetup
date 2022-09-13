@@ -22,32 +22,44 @@ keep_mount=false
 get_current=false
 keep_img=false
 
+# shellcheck disable=SC2120
 help () {
-    #don't echo commands
-    set +x
     # if arguments, print them
-    [ $# == 0 ] || echo "$@"
+    [ $# == 0 ] || echo "$*"
 
-    echo "usage: $0 <options> zipfile"
-    echo " -w, --write=target       write raspian to sdcard"
-    echo " -h, --host=name          sets hostname on rpi"
-    echo " -u, --user=name          sets username on rpi"
-    echo " -s, --shell              start shell on raspian"
-    echo "     --uart               enable uart"
-    echo "     --wifi-ssid=ssid     set wifi ssid"
-    echo "     --wifi-pass=pass     set wifi password"
-    echo "                          TODO: wifi doesn't work, wlan0 just doesn't get enabled?"
-    echo " -v, --verbose            verbosity, 2 levels"
-    echo " -q, --quiet              none verbosity"
-    echo "     --keep-mount         don't unmount at the end"
-    echo "     --get-current        give link to current pi image"
-    echo "     --unmount            try to unmount a previous run then exit"
-    echo "     --keep-existing-img  don't throw out existing .img"
-    echo "     --help               show this help"
+  cat <<EOF
+usage: $0 <options> zipfile
+ -w, --write=target       write raspian to sdcard
+ -h, --host=name          sets hostname on rpi
+ -u, --user=name          sets username on rpi
+ -s, --shell              start shell on raspian
+     --uart               enable uart
+     --wifi-ssid=ssid     set wifi ssid
+     --wifi-pass=pass     set wifi password
+                          TODO: wifi doesn't work, wlan0 just doesn't get enabled?
+ -v, --verbose            verbosity, 2 levels
+ -q, --quiet              none verbosity
+     --keep-mount         don't unmount at the end
+     --get-current        give link to current pi image
+     --unmount            try to unmount a previous run then exit
+     --keep-existing-img  don't throw out existing .img
+     --help               show this help
+EOF
 
     # if args, exit 1 else exit 0
     [ $# == 0 ] || exit 1
     exit 0
+}
+
+msg() {
+    echo >&2 -e "${1-}"
+}
+
+die() {
+    local msg=$1
+    local code=${2-1} # default exit status 1
+    msg "$msg"
+    exit "$code"
 }
 
 main() {
@@ -55,8 +67,7 @@ main() {
     TEMP=$(getopt -o w:h:u:svq --long help,write:,hostname:,user:,shell,verbose,uart,wifi-ssid:,wifi-pass:,keep-mount,unmount,get-current,keep-existing-img -n "$0" -- "$@")
     #shellcheck disable=SC2181
     if [ $? != 0 ] ; then
-        echo "Something wrong with getopt" >&2
-        exit 1
+        die "Something wrong with getopt" >&2
     fi
     eval set -- "$TEMP"
 
@@ -87,13 +98,10 @@ main() {
     fi
 
 
-    #if no source file, help
-    if [ $# -eq 0 ]; then
-        help
-        exit 1;
-    fi
-
     zipfile=${1:-}
+    if [ -z "$zipfile" ]; then
+        help "need to pass in zipfile"
+    fi
 
     if [[ -n "$hostname" ]]; then echo "hostname: $hostname"; fi
     echo "username: $username"
@@ -127,8 +135,7 @@ SUDO() {
 dd_somewhere () {
     dev=$1
     if [ ! -e "$dev" ]; then
-        echo "$dev doesn't exist"
-        exit 1
+        die "$dev doesn't exist"
     fi
     echo "dding to $dev"
     SUDO dd if="$imgfile" of="$dev" bs=1M status=progress
@@ -238,13 +245,11 @@ getLatestPiImageLink() {
 
 actually_run() {
     if is_mounted $MOUNT_POINT ; then
-        echo "something is mounted to $MOUNT_POINT, fix it and try again"
-        exit 1
+        die "something is mounted to $MOUNT_POINT, fix it and try again"
     fi
     #get zipfile, confirm it exists
     if [[ ! -f "$zipfile" ]]; then
-        echo "zipfile/imgfile doesn't exist";
-        exit 1
+        die "zipfile/imgfile doesn't exist";
     fi
 
     latestLink=$(getLatestPiImageLink)
@@ -274,8 +279,7 @@ actually_run() {
         if [ ! -f "$imgfile" ]; then
             unxz --keep "$zipfile"
             if [[ ! -f "$imgfile" ]]; then
-                echo "Issue unzipping $zipfile";
-                exit 1
+                die "Issue unzipping $zipfile";
             fi
         fi
     else
@@ -289,7 +293,7 @@ actually_run() {
 
     mount_loop
     if [ -z "${MOUNT_POINT}" ] || [ ! -f "$MOUNT_POINT/etc/rpi-issue" ] || [ ! -f "$MOUNT_POINT/boot/issue.txt" ]; then
-        help raspbian root not as expected
+        die raspbian root not as expected
     fi
     #now we're mounted in memory
 
@@ -301,7 +305,7 @@ actually_run() {
 
     #assume that if the /home/pi directory doesn't exist, all setup is done.
     if [ ! -d $MOUNT_POINT/home/pi/ ]; then
-        echo "ASSUMING USER ALREADY CONFIGURED: TODO maybe not that"
+        msg "ASSUMING USER ALREADY CONFIGURED: TODO maybe not that"
     else
         run_chroot "groups pi"
         run_chroot "useradd $username -m -G \\\$(groups pi | sed 's/pi : pi //; s/ /,/g')"
