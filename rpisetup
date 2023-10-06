@@ -346,6 +346,11 @@ network={
 }
 EOF
         fi
+
+        # try to handle the user setup thing
+        run_chroot systemctl disable userconfig || true
+        run_chroot rm -f /etc/ssh/sshd_config.d/rename_user.conf
+
     fi
 
     if [ "$rpi_shell" -eq 1 ]; then
